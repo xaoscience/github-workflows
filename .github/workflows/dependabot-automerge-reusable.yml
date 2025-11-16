@@ -1,0 +1,75 @@
+name: Dependabot Auto-merge (Reusable)
+
+# Reusable workflow for auto-merging Dependabot PRs across multiple repositories
+# Usage: call this workflow from any repo with `uses: xaoscience/github-workflows/.github/workflows/dependabot-automerge-reusable.yml@main`
+
+on:
+  workflow_call:
+    inputs:
+      merge_method:
+        description: 'Merge method: merge, squash, or rebase'
+        required: false
+        type: string
+        default: 'squash'
+      require_label:
+        description: 'Whether to require the automerge label'
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      AUTOMERGE_PAT:
+        description: 'Personal Access Token with repo scope for merging'
+        required: true
+
+permissions:
+  pull-requests: write
+  contents: read
+  checks: read
+  statuses: read
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Guard and merge Dependabot PR
+        uses: actions/github-script@v6
+        env:
+          MERGE_TOKEN: ${{ secrets.AUTOMERGE_PAT }}
+          MERGE_METHOD: ${{ inputs.merge_method }}
+          REQUIRE_LABEL: ${{ inputs.require_label }}
+        with:
+          github-token: ${{ secrets.AUTOMERGE_PAT }}
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) return core.info('No PR in context.');
+            
+            // Validate author is Dependabot bot
+            const author = pr.user && pr.user.login;
+            const authorType = pr.user && pr.user.type;
+            if (!(author === 'dependabot[bot]' && authorType === 'Bot')) {
+              return core.info(`Skipping: PR author ${author} (type=${authorType}) is not Dependabot.`);
+            }
+            
+            // Optionally validate automerge label
+            const requireLabel = process.env.REQUIRE_LABEL === 'true';
+            if (requireLabel) {
+              const labels = (pr.labels || []).map(l => l.name);
+              if (!labels.includes('automerge')) {
+                return core.info("Skipping: no 'automerge' label.");
+              }
+            }
+            
+            const { owner, repo } = context.repo;
+            const pull_number = pr.number;
+            const merge_method = process.env.MERGE_METHOD || 'squash';
+            
+            core.info(`Attempting to merge PR #${pull_number} in ${owner}/${repo} (method: ${merge_method})`);
+            
+            try {
+              const res = await github.rest.pulls.merge({ owner, repo, pull_number, merge_method });
+              core.info(`✓ Merged successfully: ${res.data.merged ? 'merged' : 'pending'}`);
+              core.info(`  SHA: ${res.data.sha}`);
+              core.info(`  Message: ${res.data.message}`);
+            } catch (err) {
+              core.setFailed(`Merge failed: ${err.message}`);
+            }
