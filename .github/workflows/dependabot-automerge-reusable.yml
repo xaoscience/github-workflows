@@ -19,7 +19,7 @@ on:
       pull_number:
         description: 'PR number for manual testing (optional)'
         required: false
-        type: number
+        type: string
     # No secrets required - workflow uses its own repo secret
 
 permissions:
