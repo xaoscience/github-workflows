@@ -16,6 +16,10 @@ on:
         required: false
         type: boolean
         default: true
+      pull_number:
+        description: 'PR number for manual testing (optional)'
+        required: false
+        type: number
     # No secrets required - workflow uses its own repo secret
 
 permissions:
@@ -33,10 +37,49 @@ jobs:
         env:
           MERGE_METHOD: ${{ inputs.merge_method }}
           REQUIRE_LABEL: ${{ inputs.require_label }}
+          MANUAL_PR_NUMBER: ${{ inputs.pull_number }}
         with:
           github-token: ${{ secrets.AUTOMERGE_PAT }}
           script: |
             const pr = context.payload.pull_request;
+            const manualPrNumber = process.env.MANUAL_PR_NUMBER ? parseInt(process.env.MANUAL_PR_NUMBER, 10) : null;
+            
+            // For manual runs, fetch PR data
+            if (manualPrNumber && !pr) {
+              const { owner, repo } = context.repo;
+              const prData = await github.rest.pulls.get({ owner, repo, pull_number: manualPrNumber });
+              const fetchedPr = prData.data;
+              
+              // Validate Dependabot author
+              const author = fetchedPr.user && fetchedPr.user.login;
+              const authorType = fetchedPr.user && fetchedPr.user.type;
+              if (!(author === 'dependabot[bot]' && authorType === 'Bot')) {
+                return core.info(`Skipping: PR author ${author} (type=${authorType}) is not Dependabot.`);
+              }
+              
+              // Check label if required
+              const requireLabel = process.env.REQUIRE_LABEL === 'true';
+              if (requireLabel) {
+                const labels = (fetchedPr.labels || []).map(l => l.name);
+                if (!labels.includes('automerge')) {
+                  return core.info("Skipping: no 'automerge' label.");
+                }
+              }
+              
+              const merge_method = process.env.MERGE_METHOD || 'squash';
+              core.info(`Attempting to merge PR #${manualPrNumber} in ${owner}/${repo} (method: ${merge_method})`);
+              
+              try {
+                const res = await github.rest.pulls.merge({ owner, repo, pull_number: manualPrNumber, merge_method });
+                core.info(`✓ Merged successfully: ${res.data.merged ? 'merged' : 'pending'}`);
+                core.info(`  SHA: ${res.data.sha}`);
+                core.info(`  Message: ${res.data.message}`);
+              } catch (err) {
+                core.setFailed(`Merge failed: ${err.message}`);
+              }
+              return;
+            }
+            
             if (!pr) return core.info('No PR in context.');
             
             // Validate author is Dependabot bot
