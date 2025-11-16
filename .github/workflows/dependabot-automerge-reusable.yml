@@ -16,10 +16,7 @@ on:
         required: false
         type: boolean
         default: true
-    secrets:
-      AUTOMERGE_PAT:
-        description: 'Personal Access Token with repo scope for merging'
-        required: true
+    # No secrets required - workflow uses its own repo secret
 
 permissions:
   pull-requests: write
@@ -34,7 +31,6 @@ jobs:
       - name: Guard and merge Dependabot PR
         uses: actions/github-script@v6
         env:
-          MERGE_TOKEN: ${{ secrets.AUTOMERGE_PAT }}
           MERGE_METHOD: ${{ inputs.merge_method }}
           REQUIRE_LABEL: ${{ inputs.require_label }}
         with:
