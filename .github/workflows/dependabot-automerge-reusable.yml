@@ -20,11 +20,14 @@ on:
         description: 'PR number for manual testing (optional)'
         required: false
         type: string
-    # No secrets required - workflow uses its own repo secret
+    secrets:
+      AUTOMERGE_PAT:
+        description: 'Personal Access Token with repo scope for merging'
+        required: true
 
 permissions:
   pull-requests: write
-  contents: read
+  contents: write
   checks: read
   statuses: read
 
