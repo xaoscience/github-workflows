@@ -1,5 +1,0 @@
-PlastidTaxaPipeline
-xaostech-auth
-GAPMananas
-xaostech.io
-xaos-chat
